@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   importFolderPath: ImportFolder/
   outputFolderPath: RoadRageAssets/
-  importTypes: 2
+  importTypes: 1

@@ -111,16 +111,19 @@ public class P3DXMLImporter : ScriptableObject{
                     break;
 
                     case "0x4500": //skeleton
+                    /*
                         if( importTypes == runType.All || importTypes == runType.Meshes){
                             DebugManager.Log("== Gen Skeleton == " +  cType.ToString() , 5 );
                             GenerateSkeleton(chunk);
                         }
+                        */
                     break;
 
                     
                     case "0x10001": // Skin mesh - made up of meshes and colliders
                         if( importTypes == runType.All || importTypes == runType.Meshes){
                             DebugManager.Log("== Gen Skin Mesh == " +  cType.ToString() , 5 );
+                            GenerateSkin(chunk);
                         }
                     break;
 
@@ -149,6 +152,253 @@ public class P3DXMLImporter : ScriptableObject{
 
     }
 
+    public string getValueElementValueString(XmlNode chunk, string _name){
+        string returnString = "";
+        XmlNode element = chunk.SelectSingleNode("Value[@Name='"+ _name + "']");
+        returnString = element.Attributes["Value"].Value;  
+        return returnString;
+    }
+
+    public int getValueElementValueInt(XmlNode chunk, string _name){
+        int returnInt = 0;
+        XmlNode element = chunk.SelectSingleNode("Value[@Name='"+ _name + "']");
+        returnInt = int.Parse( element.Attributes["Value"].Value );  
+        return returnInt;
+    }
+    public void GenerateSkin( XmlNode rootChunk ){ 
+
+        string _name = getValueElementValueString(rootChunk, "Name");
+        string _skeletonName = getValueElementValueString(rootChunk, "SkeletonName");
+
+        XmlNodeList chunkChunks = rootChunk.SelectNodes("Chunk");
+
+        DebugManager.Log("Skin:<b>" + _name + "</b> skel:" + _skeletonName , 50 );
+        int mesh_count = 0;
+        if( chunkChunks.Count > 0 ){
+
+            //create a parent GO
+            GameObject go_parent = new GameObject(_name);
+
+            for (int i = 0; i < chunkChunks.Count; i++) {
+
+                XmlNode chunk = chunkChunks[i];
+                string cType = chunk.Attributes["Type"].Value;
+
+                switch( cType ){
+                    case "0x10002": //Primitive Group
+
+                        
+                        mesh_count++;
+                        GameObject go = new GameObject(_name + "_mesh_" + mesh_count.ToString() );
+                        go.transform.parent = go_parent.transform;
+
+                        string _shaderName = getValueElementValueString(chunk, "ShaderName");
+                        //try to find shader
+
+                        int _PrimitiveType = getValueElementValueInt(chunk, "PrimitiveType"); //TriangleList, TriangleStrip, LineList, LineStrip, 
+/*
+enum class PrimitiveType : uint32_t
+{
+	TriangleList,
+	TriangleStrip,
+	LineList,
+	LineStrip,
+};
+
+GL_TRIANGLE_STRIP
+for n vertices (v0, v1, v2, ... , vn-1)
+Draws a series of triangles (three-sided polygons) using vertices v0, v1, v2, then v2, v1, v3 (note the order), then v2, v3, v4, and so on. 
+The ordering is to ensure that the triangles are all drawn with the same orientation so that the strip can correctly form part of a surface. 
+Preserving the orientation is important for some operations, such as culling. (See "Reversing and Culling Polygon Faces") n must be at least 3 for anything to be drawn.
+
+v0, v1, v2, then v2, v1, v3 (note the order), then v2, v3, v4
+
+if (!(current_index % 2))    {        
+    temp_tri.verts[0] = index_pointer[0];  i      
+    temp_tri.verts[1] = index_pointer[1];   i+1     
+    temp_tri.verts[2] = index_pointer[2];   i+2 
+}    else    {        
+    temp_tri.verts[0] = index_pointer[2];   i+1     
+    temp_tri.verts[1] = index_pointer[1];   i     
+    temp_tri.verts[2] = index_pointer[0];   i+2 
+}
+
+*/
+
+                        int _NumVertices = getValueElementValueInt(chunk, "NumVertices");
+                        int _NumIndices = getValueElementValueInt(chunk, "NumIndices");
+                        int _NumMatrices = getValueElementValueInt(chunk, "NumMatrices");
+
+                        Vector3[] _verticePositions = new Vector3[_NumVertices];
+                        Vector3[] _normals = new Vector3[_NumVertices];
+                        Vector2[] _uvs = new Vector2[_NumVertices];
+                        int[] _indices = new int[_NumIndices];
+
+                        DebugManager.Log($"Prim GROUP shaderName:{_shaderName} NumVertices:{_NumVertices} NumIndices:{_NumIndices} NumMatrices{_NumMatrices}" , 50 );
+                        
+                        XmlNodeList primChunks = chunk.SelectNodes("Chunk");
+                        if( primChunks.Count > 0 ){
+
+                            
+                            for (int j = 0; j < primChunks.Count; j++) {
+
+                                XmlNode pchunk = primChunks[j];
+                                string pType = pchunk.Attributes["Type"].Value;
+                                XmlNodeList pItems;
+                                XmlNode pElement;
+
+                                switch( pType ){
+                                    case "0x10005": //Vert positions
+                                        
+                                        pElement = pchunk.SelectSingleNode("Value[@Name='Positions']");
+                                        pItems = pElement.SelectNodes("Item");
+                                        for (int k = 0; k < pItems.Count; k++) {
+                                            XmlNode pItem = pItems[k];
+                                
+                                            _verticePositions[k] = new Vector3( 
+                                                float.Parse(pItem.Attributes["X"].Value),
+                                                float.Parse(pItem.Attributes["Y"].Value),
+                                                float.Parse(pItem.Attributes["Z"].Value)
+                                                );
+                                        }
+                                        
+                                    break;
+                                    case "0x10006": //Normals
+                                        
+                                        pElement = pchunk.SelectSingleNode("Value[@Name='Normals']");
+                                        pItems = pElement.SelectNodes("Item");
+                                        for (int k = 0; k < pItems.Count; k++) {
+                                            XmlNode pItem = pItems[k];
+                                
+                                            _normals[k] = new Vector3( 
+                                                float.Parse(pItem.Attributes["X"].Value),
+                                                float.Parse(pItem.Attributes["Y"].Value),
+                                                float.Parse(pItem.Attributes["Z"].Value)
+                                                );
+                                        }
+                                        
+                                    break;
+                                    case "0x10007": //UVs
+                                        
+                                        pElement = pchunk.SelectSingleNode("Value[@Name='UVs']");
+                                        pItems = pElement.SelectNodes("Item");
+                                        for (int k = 0; k < pItems.Count; k++) {
+                                            XmlNode pItem = pItems[k];
+                                
+                                            _uvs[k] = new Vector2( 
+                                                float.Parse(pItem.Attributes["X"].Value),
+                                                float.Parse(pItem.Attributes["Y"].Value)
+                                                );
+                                        }
+                                        
+                                    break;
+                                    case "0x1000A": //_indices
+                                        
+                                        pElement = pchunk.SelectSingleNode("Value[@Name='Indices']");
+                                        pItems = pElement.SelectNodes("Item");
+                                        for (int k = 0; k < pItems.Count; k++) {
+                                            XmlNode pItem = pItems[k];
+                                
+                                            _indices[k] = int.Parse(pItem.Attributes["Value"].Value);
+                                        }
+                                        
+                                    break;
+                                }
+                            }
+                        }
+
+
+                        MeshFilter _meshFilter = go.AddComponent<MeshFilter>();
+                        MeshRenderer _meshRenderer = go.AddComponent<MeshRenderer>();
+
+                        Mesh mesh = new Mesh();
+                        mesh.name = _shaderName;
+
+                        switch(_PrimitiveType){
+                            case 0: //TriangleList
+
+                            break;
+                            case 1: //TriangleStrip
+                                _indices = TriangleStripToList(_indices);                                
+
+                            break;
+                        }
+                        
+                        mesh.vertices = _verticePositions;
+                        mesh.uv = _uvs;
+                        mesh.normals = _normals;
+                        mesh.triangles = _indices;
+
+                        mesh.RecalculateTangents();
+
+                        _meshFilter.mesh = mesh;
+
+                        //search for material
+                        //_shaderName
+                        string materialName = CreateMaterialName(_shaderName);
+                        string[] materialGuids = AssetDatabase.FindAssets(materialName + " t:Material" , new[] {"Assets" + Path.DirectorySeparatorChar + outputFolderPath + materialFolder} );
+                        if( materialGuids.Length > 0 ){
+                            string[] materialPaths = new string[ materialGuids.Length ];
+                            for(int m = 0; m < materialPaths.Length; m++){
+
+                                materialPaths[m] = AssetDatabase.GUIDToAssetPath( materialGuids[m] );
+                            }
+
+                            DebugManager.Log("Found Matching materials:<b>" + String.Join(", ", materialPaths) + "</b>" , 50 );
+                            if( !String.IsNullOrEmpty( materialPaths[0]) ){
+                                Material _mat = (Material)AssetDatabase.LoadAssetAtPath(materialPaths[0], typeof(Material));
+                                _meshRenderer.material = _mat;
+                            }
+
+
+                        }
+
+                    break;
+                    case "0x10003": //bounding box
+
+                    break;
+                    case "0x10004": //bounding sphere
+
+                    break;
+                }
+            }
+        }
+        
+    }
+
+    //using vertices v0, v1, v2, then v2, v1, v3 (note the order), then v2, v3, v4, and so on
+    /*
+if (!(current_index % 2))    {        
+    temp_tri.verts[0] = index_pointer[0];  i      
+    temp_tri.verts[1] = index_pointer[1];   i+1     
+    temp_tri.verts[2] = index_pointer[2];   i+2 
+}    else    {        
+    temp_tri.verts[0] = index_pointer[2];   i+1     
+    temp_tri.verts[1] = index_pointer[1];   i     
+    temp_tri.verts[2] = index_pointer[0];   i+2 
+}
+*/
+    public int[] TriangleStripToList( int[] _triangleStrip ){
+
+        List<int> _triangleList = new List<int>();
+        for( int i = 0; i < _triangleStrip.Length - 2; i++){
+            if( i % 2 == 0){
+                //even row then v2, v1, v3
+                _triangleList.Add( _triangleStrip[i] );
+                _triangleList.Add( _triangleStrip[i+1] );
+                _triangleList.Add( _triangleStrip[i+2] );
+
+            }else{
+                //odd row - v0, v1, v2
+                _triangleList.Add( _triangleStrip[i+1] );
+                _triangleList.Add( _triangleStrip[i] );
+                _triangleList.Add( _triangleStrip[i+2] );
+            }
+        }
+
+        return _triangleList.ToArray();
+
+    }
 
 
     //positional data is held in a 4x4 matrix
@@ -552,8 +802,8 @@ public class P3DXMLImporter : ScriptableObject{
 
 
 
-
-        string savefilepath = outputFolderPath + materialFolder + Path.DirectorySeparatorChar + currentBasename +"_" + _chunkName + _extension; 
+        string materialName = CreateMaterialName(_chunkName);
+        string savefilepath = outputFolderPath + materialFolder + Path.DirectorySeparatorChar + materialName + _extension; 
         string fullfilepath = basepath + Path.DirectorySeparatorChar + savefilepath;
         string assetDBpath = "Assets" + Path.DirectorySeparatorChar + savefilepath;
 
@@ -572,6 +822,10 @@ public class P3DXMLImporter : ScriptableObject{
         DebugManager.Log($"Saved to :{assetDBpath}",5);
         //Selection.activeObject = destTex;
 /* */
+    }
+
+    public string CreateMaterialName(string p3dShadername){
+        return currentBasename +"_" + p3dShadername;
     }
 
     public static bool IsZero(float a){

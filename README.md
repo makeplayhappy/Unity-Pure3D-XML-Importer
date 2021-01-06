@@ -1,5 +1,5 @@
-# Unity-Pure3D-XML-Importer
-Import the xml output from Lucas' Pure3D Editor into Unity3d.
+# Unity3D Pure3D XML Importer
+Import the xml output from Lucas' Pure3D Editor into Unity3D.
 
 ##Lucas' Pure3D Editor 
 [Lucas' Pure3D Editor](https://docs.donutteam.com/docs/lucasp3deditor/intro)
