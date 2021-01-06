@@ -29,6 +29,7 @@ public class P3DXMLImporter : ScriptableObject{
     //public Material testMaterial;
 
     //private Pure3D.File XML_File;
+    public const float ZeroTolerance = 1e-6f;
 
     public void RunImporter(){
 
@@ -106,8 +107,6 @@ public class P3DXMLImporter : ScriptableObject{
                             GenerateMaterial(chunk);
 
                         }
-                        
-
 
                     break;
 
@@ -200,14 +199,28 @@ public class P3DXMLImporter : ScriptableObject{
                                     break;
                                     case "RestPose":
                                 //    M11="1" M12="0" M13="-0" M14="0" M21="0" M22="1" M23="-0" M24="0" M31="-0" M32="-0" M33="1" M34="-0" M41="0" M42="0" M43="0" M44="1" />
+                                
+                                //Matrices in Unity are column major; i.e. the position of a transformation matrix is in the last column,
+                                //and the first three columns contain x, y, and z-axes. Data is accessed as: row + (column*4)
+                                //sharpDX uses row_major matrixes
+
+                                //these need massaging to be usable
+                                
                                         for(int x = 0;x <= 3; x++){
                                             for(int y = 0;y <= 3; y++){
                                                 string Mattribute = "M" + (x+1).ToString() + (y+1).ToString();
                                                 _restPoseMatrix[x,y] = Convert.ToSingle( jointElement.Attributes[Mattribute].Value );
                                             }
                                         }
+
+//                                        DebugManager.Log(i + " " + _jointName + " Matrix \n" + _restPoseMatrix.ToString("e2")  , 50 );
+                                        
+/*
+                                        _restPoseMatrix = _restPoseMatrix.transpose;
                                         DebugManager.Log(i + " " + _jointName + " Matrix \n" + _restPoseMatrix.ToString("e2")  , 50 );
                                         //DebugManager.Log("Is valid Matrix? " + _restPoseMatrix.ValidTRS()  , 50 );
+                                        
+
                                         t_position = _restPoseMatrix.MultiplyPoint3x4( Vector3.one );
                                         DebugManager.Log(i + " " + _jointName + " Position " + t_position.ToString("F2")  , 50 );
 
@@ -216,6 +229,15 @@ public class P3DXMLImporter : ScriptableObject{
 
                                         t_scale = _restPoseMatrix.lossyScale;
                                         DebugManager.Log(i + " " + _jointName + " Scale " + t_scale.ToString("F2")  , 50 );
+*/
+                                        //try sharpdx decomposer
+
+                                        MatrixDecompose(ref _restPoseMatrix, out t_scale, out t_rotation, out t_position);
+/* * /
+                                        DebugManager.Log(i + " " + _jointName + " Position " + m_position.ToString("F2")  , 50 );
+                                        DebugManager.Log(i + " " + _jointName + " Rotation " + m_rotation.eulerAngles.ToString("F2")  , 50 );
+                                        DebugManager.Log(i + " " + _jointName + " Scale " + m_scale.ToString("F2")  , 50 );
+/* */					
 
                                     break;
                                 }
@@ -242,17 +264,11 @@ public class P3DXMLImporter : ScriptableObject{
                             }
                             tr.localPosition = t_position;
                             tr.localRotation = t_rotation;
+                            //tr.rotation = m_rotation;
                             tr.localScale = t_scale;
 
                             mSkeleton.Add(tr);
                         }
-
-
-                        
-
-                        
- 
-
 
                     break;
                     default:
@@ -266,48 +282,64 @@ public class P3DXMLImporter : ScriptableObject{
         
     }
 
-/*
-    public static void Decompose(ref SharpDX.Matrix Matrix, out Vector3 Scale)
-		{
-			Scale = new Vector3();
-			Scale.X = (float)Math.Sqrt((double)(Matrix.M11 * Matrix.M11 + Matrix.M12 * Matrix.M12 + Matrix.M13 * Matrix.M13));
-			Scale.Y = (float)Math.Sqrt((double)(Matrix.M21 * Matrix.M21 + Matrix.M22 * Matrix.M22 + Matrix.M23 * Matrix.M23));
-			Scale.Z = (float)Math.Sqrt((double)(Matrix.M31 * Matrix.M31 + Matrix.M32 * Matrix.M32 + Matrix.M33 * Matrix.M33));
-		}
+    //from https://github.com/sharpdx/SharpDX/blob/master/Source/SharpDX.Mathematics/Matrix.cs
+    //Scaling is the length of the rows
+    public static void MatrixDecompose(ref Matrix4x4 Matrix, out Vector3 Scale){
+        Scale = new Vector3();
+        Scale.x = (float)Mathf.Sqrt((Matrix[0,0] * Matrix[0,0] + Matrix[0,1] * Matrix[0,1] + Matrix[0,2] * Matrix[0,2]));
+        Scale.y = (float)Mathf.Sqrt((Matrix[1,0] * Matrix[1,0] + Matrix[1,1] * Matrix[1,1] + Matrix[1,2] * Matrix[1,2]));
+        Scale.z = (float)Mathf.Sqrt((Matrix[2,0] * Matrix[2,0] + Matrix[2,1] * Matrix[2,1] + Matrix[2,2] * Matrix[2,2]));
+    }
 
-		public static void Decompose(ref SharpDX.Matrix Matrix, out Vector3 Scale, out Vector3 Translation)
-		{
-			Translation = new Vector3();
-			Translation.X = Matrix.M41;
-			Translation.Y = Matrix.M42;
-			Translation.Z = Matrix.M43;
-			Utility.Decompose(ref Matrix, out Scale);
-		}
+     //Get the translation.
+	public static void MatrixDecompose(ref Matrix4x4 Matrix, out Vector3 Scale, out Vector3 Translation){
+        Translation = new Vector3();
+        Translation.x = Matrix[3,0];
+        Translation.y = Matrix[3,1];
+        Translation.z = Matrix[3,2];
+        MatrixDecompose(ref Matrix, out Scale);
+	}
 
-		public static bool Decompose(ref SharpDX.Matrix Matrix, out Vector3 Scale, out Matrix3x3 Rotation, out Vector3 Translation)
-		{
-			Utility.Decompose(ref Matrix, out Scale, out Translation);
-			if (MathUtil.IsZero(Scale.X) || MathUtil.IsZero(Scale.Y) || MathUtil.IsZero(Scale.Z))
-			{
-				Rotation = Matrix3x3.Identity;
-				return false;
-			}
-			Matrix3x3 matrix3x3 = new Matrix3x3()
-			{
-				M11 = Matrix.M11 / Scale.X,
-				M12 = Matrix.M12 / Scale.X,
-				M13 = Matrix.M13 / Scale.X,
-				M21 = Matrix.M21 / Scale.Y,
-				M22 = Matrix.M22 / Scale.Y,
-				M23 = Matrix.M23 / Scale.Y,
-				M31 = Matrix.M31 / Scale.Z,
-				M32 = Matrix.M32 / Scale.Z,
-				M33 = Matrix.M33 / Scale.Z
-			};
-			Rotation = matrix3x3;
-			return true;
-		}
-*/
+	public static bool MatrixDecompose(ref Matrix4x4 Matrix, out Vector3 Scale, out Quaternion Rotation, out Vector3 Translation){
+
+        MatrixDecompose(ref Matrix, out Scale, out Translation);
+
+        Rotation = Quaternion.identity;
+
+        if (IsZero(Scale.x) || IsZero(Scale.y) || IsZero(Scale.z)){
+            
+            return false;
+        }
+
+        Matrix4x4 RotationMatrix = Matrix4x4.zero;
+        RotationMatrix[0,0] = Matrix[0,0] / Scale.x;
+        RotationMatrix[0,1] = Matrix[0,1] / Scale.x;
+        RotationMatrix[0,2] = Matrix[0,2] / Scale.x;
+
+        RotationMatrix[1,0] = Matrix[1,0] / Scale.y;
+        RotationMatrix[1,1] = Matrix[1,1] / Scale.y;
+        RotationMatrix[1,2] = Matrix[1,2] / Scale.y;
+
+        RotationMatrix[2,0] = Matrix[2,0] / Scale.z;
+        RotationMatrix[2,1] = Matrix[2,1] / Scale.z;
+        RotationMatrix[2,2] = Matrix[2,2] / Scale.z;
+
+        RotationMatrix[3,3] = 1f;
+
+        try{
+            //Matrices in Unity are column major; i.e. the position of a transformation matrix is in the last column, and the first three columns contain x, y, and z-axes. Data is accessed as: row + (column*4)
+            //sharpDX uses row_major matrixes
+            RotationMatrix = RotationMatrix.transpose;
+            Rotation = RotationMatrix.rotation;
+            
+        }
+        catch(Exception e){
+            DebugManager.Log( e.Message , 5 );
+        }
+
+        return true;
+
+	}
 
     //Shader = 0x11000,        
     // Handle the shader setting - import as Standard Material
@@ -540,6 +572,10 @@ public class P3DXMLImporter : ScriptableObject{
         DebugManager.Log($"Saved to :{assetDBpath}",5);
         //Selection.activeObject = destTex;
 /* */
+    }
+
+    public static bool IsZero(float a){
+        return Math.Abs(a) < ZeroTolerance;
     }
 
 
